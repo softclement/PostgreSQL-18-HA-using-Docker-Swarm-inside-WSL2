@@ -18,77 +18,43 @@
 
 ---
 
-# PostgreSQL 18 Docker Swarm HA PoC
+# STEP 1 — Clean Existing Docker/Swarm Environment
 
-This PoC demonstrates:
+This step completely removes:
 
-* PostgreSQL 18
-* Docker Swarm
-* WSL2 Ubuntu
-* Streaming Replication
-* Manual Failover Concepts
-* Container-based PostgreSQL HA
-
-Without using:
-
-* Patroni
-* Kubernetes
-* Pgpool
-* Repmgr
-
----
-
-# STEP 1 — Clean Old Environment
-
-## Remove Old Swarm Stack
+* Existing Docker Swarm cluster
+* Containers
+* Images
+* Volumes
+* Networks
+* Previous PoC folders
 
 ```bash
+# Remove existing swarm stack
 docker stack rm pgcluster
+
+# Remove all containers
+docker ps -aq | xargs -r docker rm -f
+
+# Remove all docker images
+docker images -q | xargs -r docker rmi -f
+
+# Remove all docker volumes
+docker volume ls -q | xargs -r docker volume rm -f
+
+# Remove unused docker networks
+docker network prune -f
+
+# Leave docker swarm cluster
+docker swarm leave --force
+
+# Remove PoC working directory
+sudo rm -rf ~/pg-swarm-ha
 ```
 
 ---
 
-## Remove Old Containers
-
-```bash
-docker ps -aq | xargs docker rm -f
-```
-
----
-
-## Remove Old Images
-
-```bash
-docker images -q | xargs docker rmi -f
-```
-
----
-
-## Remove Old Volumes
-
-```bash
-docker volume ls -q | xargs docker volume rm -f
-```
-
----
-
-## Remove Old Networks
-
-```bash
-docker network rm pg-swarm-net
-```
-
----
-
-## Remove Old Folders
-
-```bash
-sudo rm -rf primary standby1 standby2 standby_base
-```
-
----
-
-# STEP 2 — Verify Docker Environment
+# STEP 2 — Verify Clean Environment
 
 ```bash
 echo 'Docker Images'
@@ -102,7 +68,7 @@ docker network ls
 echo '-------------------------------------------'
 
 echo 'Docker Containers'
-docker container ls
+docker container ls -a
 
 echo '-------------------------------------------'
 
@@ -120,55 +86,68 @@ echo 'Docker Nodes'
 docker node ls
 ```
 
+Expected:
+
+* No containers
+* No postgres images
+* No volumes
+* No services
+* Swarm inactive OR no active services
+
 ---
 
-# STEP 3 — Prerequisites
-
-## Verify Docker
+# STEP 3 — Verify Docker Installation
 
 ```bash
 docker --version
-```
 
----
-
-## Verify Docker Compose
-
-```bash
 docker-compose --version
 ```
 
+Example:
+
+```bash
+Docker version 29.x.x
+docker-compose version 1.29.x
+```
+
 ---
 
-## Pull PostgreSQL 18 Image
+# STEP 4 — Pull PostgreSQL 18 Docker Image
 
 ```bash
 docker pull postgres:18
 ```
 
----
-
-# STEP 4 — Initialize Docker Swarm
-
-## Standard Command
+Verify image:
 
 ```bash
-docker swarm init
+docker images
 ```
 
 ---
 
-## Possible Error
+# STEP 5 — Create Working Directory
+
+```bash
+mkdir ~/pg-swarm-ha
+
+cd ~/pg-swarm-ha
+```
+
+---
+
+# STEP 6 — Initialize Docker Swarm
+
+First attempt may fail in WSL2 because multiple IP addresses exist.
+
+Example error:
 
 ```text
-Error response from daemon:
 could not choose an IP address to advertise
-since this system has multiple addresses
 ```
 
----
-
-## Fix
+Fix:
 
 ```bash
 docker swarm init --advertise-addr <your-ip>
@@ -180,26 +159,23 @@ Example:
 docker swarm init --advertise-addr 172.22.26.73
 ```
 
----
-
-## Verify Swarm
+Verify:
 
 ```bash
 docker node ls
 ```
 
----
+Expected:
 
-# STEP 5 — Create Project Directory
-
-```bash
-mkdir ~/pg-swarm-ha
-cd ~/pg-swarm-ha
+```text
+Leader
+Ready
+Active
 ```
 
 ---
 
-# STEP 6 — Create Docker Swarm Stack YAML
+# STEP 7 — Create Docker Swarm Stack YAML
 
 Create file:
 
@@ -207,9 +183,7 @@ Create file:
 vi docker-stack.yml
 ```
 
----
-
-## docker-stack.yml
+Add:
 
 ```yaml
 version: '3.9'
@@ -263,25 +237,7 @@ volumes:
 
 ---
 
-# STEP 7 — Create Required Directories
-
-```bash
-mkdir primary standby1 standby2 standby_base
-```
-
----
-
 # STEP 8 — Deploy Docker Swarm Stack
-
-## Deploy
-
-```bash
-docker stack deploy -c docker-stack.yml pgcluster
-```
-
-By default Docker deploys services in detached/background mode.
-
----
 
 ## Deploy with Progress Display
 
@@ -289,51 +245,43 @@ By default Docker deploys services in detached/background mode.
 docker stack deploy --detach=false -c docker-stack.yml pgcluster
 ```
 
-Useful for learning and monitoring deployment progress.
-
----
-
-## Deploy Without Progress
+## Deploy in Background
 
 ```bash
 docker stack deploy --detach=true -c docker-stack.yml pgcluster
 ```
 
----
-
-# STEP 9 — Verify Services
-
-## List Services
+Verify:
 
 ```bash
 docker service ls
 ```
 
+Expected:
+
+```text
+1/1 replicas running
+```
+
 ---
 
-## List Containers
+# STEP 9 — Verify Containers
 
 ```bash
 docker ps
 ```
 
----
+Expected:
 
-## List Service Tasks
-
-```bash
-docker service ps pgcluster_pg-primary
-
-docker service ps pgcluster_pg-standby1
-
-docker service ps pgcluster_pg-standby2
+```text
+pgcluster_pg-primary
+pgcluster_pg-standby1
+pgcluster_pg-standby2
 ```
 
 ---
 
-# STEP 10 — Configure Primary PostgreSQL
-
-## Login to Primary
+# STEP 10 — Connect to Primary PostgreSQL
 
 ```bash
 docker exec -it $(docker ps -q -f name=pg-primary) psql -U postgres
@@ -341,7 +289,7 @@ docker exec -it $(docker ps -q -f name=pg-primary) psql -U postgres
 
 ---
 
-## Create Replication User
+# STEP 11 — Create Replication User
 
 ```sql
 CREATE ROLE replicator
@@ -350,14 +298,12 @@ LOGIN
 PASSWORD 'replpass';
 ```
 
----
-
-## Verify WAL Settings
+Verify:
 
 ```sql
-SHOW wal_level;
+show wal_level;
 
-SHOW max_wal_senders;
+show max_wal_senders;
 ```
 
 Expected:
@@ -367,93 +313,64 @@ wal_level = replica
 max_wal_senders = 10
 ```
 
----
+Exit:
 
-# STEP 11 — Edit PostgreSQL Configuration
-
-## Important Observation
-
-Installing vim inside container may fail because container runs with limited permissions.
-
----
-
-## Best Practice
-
-Edit mounted PostgreSQL files directly from WSL2 host machine.
-
----
-
-## Simple Analogy
-
-```text
-Container = Running engine
-Mounted volume = Actual hard disk
-
-You edit the disk from outside
-instead of entering engine room.
+```sql
+\q
 ```
 
 ---
 
-## Edit Files from Host
+# STEP 12 — Configure pg_hba.conf
+
+Instead of installing vim inside container, edit files directly from WSL2 host machine.
+
+Simple analogy:
+
+```text
+Container = Running Engine
+Mounted Volume = Actual Hard Disk
+```
+
+Edit directly from host:
 
 ```bash
 cd ~/pg-swarm-ha
+```
 
-vi primary/postgresql.conf
+Open:
 
+```bash
 vi primary/pg_hba.conf
 ```
 
----
-
-## Add in pg_hba.conf
+Add:
 
 ```text
 host replication replicator 0.0.0.0/0 md5
-host all all 0.0.0.0/0 md5
 ```
 
----
-
-# STEP 12 — Restart Stack
+Restart services:
 
 ```bash
-docker stack rm pgcluster
+docker service update --force pgcluster_pg-primary
 ```
 
-Wait few seconds.
-
----
-
-## Deploy Again
+Test replication user:
 
 ```bash
-docker stack deploy -c docker-stack.yml pgcluster
+docker exec -it $(docker ps -q -f name=pg-primary) psql -U replicator -d postgres
 ```
 
 ---
 
-# STEP 13 — Test Replication Connection
-
-```bash
-docker exec -it $(docker ps -q -f name=pg-primary) \
-psql -U replicator -d postgres
-```
-
-If login works, replication configuration is correct.
-
----
-
-# STEP 14 — Take Base Backup
+# STEP 13 — Take Base Backup from Primary
 
 ```bash
 docker exec -it $(docker ps -q -f name=pg-primary) bash
 ```
 
----
-
-## Create Base Backup
+Run:
 
 ```bash
 pg_basebackup \
@@ -464,35 +381,29 @@ pg_basebackup \
 -R
 ```
 
-Password:
+Exit container:
 
-```text
-replpass
+```bash
+exit
 ```
-
-Exit container.
 
 ---
 
-# STEP 15 — Copy Standby Backup to Host
+# STEP 14 — Copy Standby Base Backup
+
+Create standby folders:
+
+```bash
+mkdir standby1 standby2
+```
+
+Copy backup:
 
 ```bash
 docker cp $(docker ps -q -f name=pg-primary):/tmp/standby ./standby_base
 ```
 
----
-
-# STEP 16 — Stop Stack
-
-```bash
-docker stack rm pgcluster
-```
-
-Wait few seconds.
-
----
-
-# STEP 17 — Copy Standby Data
+Copy standby data:
 
 ```bash
 cp -r standby_base/* standby1/
@@ -500,30 +411,27 @@ cp -r standby_base/* standby1/
 cp -r standby_base/* standby2/
 ```
 
-No permission fix required.
-
 ---
 
-# STEP 18 — Start Stack Again
+# STEP 15 — Restart Standby Services
 
 ```bash
-docker stack deploy -c docker-stack.yml pgcluster
+docker service update --force pgcluster_pg-standby1
+
+docker service update --force pgcluster_pg-standby2
 ```
 
 ---
 
-# STEP 19 — Verify Replication
+# STEP 16 — Verify Streaming Replication
 
-## Check on Primary
+Connect to primary:
 
 ```bash
-docker exec -it $(docker ps -q -f name=pg-primary) \
-psql -U postgres
+docker exec -it $(docker ps -q -f name=pg-primary) psql -U postgres
 ```
 
----
-
-## Verify Streaming Replication
+Run:
 
 ```sql
 SELECT application_name,
@@ -540,9 +448,9 @@ streaming
 
 ---
 
-# STEP 20 — Replication Testing
+# STEP 17 — Test Replication
 
-## Create Table on Primary
+On Primary:
 
 ```sql
 CREATE TABLE test1(id int, name text);
@@ -552,16 +460,13 @@ INSERT INTO test1 VALUES (1,'Clement');
 
 ---
 
-## Verify on Standby
+# STEP 18 — Verify on Standby
 
 ```bash
-docker exec -it $(docker ps -q -f name=pg-standby1) \
-psql -U postgres
+docker exec -it $(docker ps -q -f name=pg-standby1) psql -U postgres
 ```
 
----
-
-## Query
+Verify:
 
 ```sql
 SELECT * FROM test1;
@@ -570,24 +475,38 @@ SELECT * FROM test1;
 Expected:
 
 ```text
- id |  name
-----+---------
-  1 | Clement
+1 | Clement
 ```
 
 ---
 
-# STEP 21 — Verify Docker Internal Details
+# STEP 19 — Useful Docker Swarm Verification Commands
 
-## Docker Images
+## List Services
 
 ```bash
-docker images
+docker service ls
 ```
 
----
+## Service Task Status
 
-## Docker Volumes
+```bash
+docker service ps pgcluster_pg-primary
+```
+
+## Container Logs
+
+```bash
+docker logs <container-id>
+```
+
+## List Nodes
+
+```bash
+docker node ls
+```
+
+## List Volumes
 
 ```bash
 docker volume ls
@@ -595,109 +514,28 @@ docker volume ls
 
 ---
 
-## Docker Networks
+# STEP 20 — Complete Cleanup
 
 ```bash
-docker network ls
-```
-
----
-
-## Docker Services
-
-```bash
-docker service ls
-```
-
----
-
-## Docker Nodes
-
-```bash
-docker node ls
-```
-
----
-
-## Docker Container Details
-
-```bash
-docker inspect <container_id>
-```
-
----
-
-## Actual Docker Image Location
-
-```bash
-docker info | grep "Docker Root Dir"
-```
-
-Usually:
-
-```text
-/var/lib/docker
-```
-
----
-
-# STEP 22 — Cleanup Complete PoC
-
-## Remove Stack
-
-```bash
+# Remove swarm stack
 docker stack rm pgcluster
+
+# Remove all containers
+docker ps -aq | xargs -r docker rm -f
+
+# Remove all images
+docker images -q | xargs -r docker rmi -f
+
+# Remove all volumes
+docker volume ls -q | xargs -r docker volume rm -f
+
+# Remove unused networks
+docker network prune -f
+
+# Leave swarm cluster
+docker swarm leave --force
+
+# Remove working directory
+sudo rm -rf ~/pg-swarm-ha
 ```
 
----
-
-## Remove Containers
-
-```bash
-docker ps -aq | xargs docker rm -f
-```
-
----
-
-## Remove Images
-
-```bash
-docker images -q | xargs docker rmi -f
-```
-
----
-
-## Remove Volumes
-
-```bash
-docker volume ls -q | xargs docker volume rm -f
-```
-
----
-
-## Remove Networks
-
-```bash
-docker network rm pg-swarm-net
-```
-
----
-
-## Remove Local Directories
-
-```bash
-sudo rm -rf primary standby1 standby2 standby_base
-```
-
----
-
-# Final Result
-
-Successfully built:
-
-* PostgreSQL 18 HA
-* Docker Swarm
-* Streaming Replication
-* Primary + Multiple Standbys
-* WSL2-based PostgreSQL Lab Environment
-* Containerized PostgreSQL Learning Platform
