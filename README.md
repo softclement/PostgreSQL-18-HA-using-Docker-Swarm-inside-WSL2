@@ -320,3 +320,146 @@ sudo rm -rf ~/pg-swarm-ha
 | pg_hba.conf path not found | PostgreSQL 18 uses different subdirectory | Use `SHOW data_directory` dynamically |
 | primary_conninfo not in postgresql.conf | Normal behaviour | Check `postgresql.auto.conf` instead |
 | Swarm init fails with IP error | WSL2 multiple network interfaces | Use `--advertise-addr $(hostname -I \| awk '{print $1}')` |
+
+---
+
+# STEP 20 — HA Failure Testing
+
+## Test 1 — Kill Primary, Watch Swarm Auto-Restart
+
+### Step 1 — Note current primary container
+
+```bash
+docker ps -f name=pg-primary
+```
+
+### Step 2 — Kill primary container
+
+```bash
+docker rm -f $(docker ps -q -f name=pg-primary)
+```
+
+### Step 3 — Watch Swarm detect and recreate it
+
+```bash
+docker ps -a
+```
+
+Observed behaviour:
+```text
+# Immediately after kill — primary gone, standbys still running
+CONTAINER ID   STATUS          NAMES
+e482d319b449   Up 4 minutes    pgcluster_pg-standby2
+9d59df370299   Up 4 minutes    pgcluster_pg-standby1
+
+# ~7 seconds later — Swarm schedules and starts new primary container
+ebfe74dfb74f   Up 2 seconds    pgcluster_pg-primary.1.<new-task-id>
+```
+
+### Step 4 — Check standby reaction during primary outage
+
+While primary is down, querying replication status returns error:
+```text
+Error response from daemon: No such container: psql
+```
+
+This is expected — standbys lose connection and retry until primary returns.
+
+### Step 5 — Verify standbys reconnect automatically
+
+Keep running until both rows show streaming:
+
+```bash
+docker exec -it $(docker ps -q -f name=pg-primary) psql -U postgres -c \
+  "SELECT application_name, client_addr, state, sync_state FROM pg_stat_replication;"
+```
+
+Timeline observed:
+```text
+# Immediately after new primary starts — standbys reconnecting
+ application_name | client_addr | state | sync_state
+------------------+-------------+-------+------------
+(0 rows)
+
+# ~15-20 seconds later — both standbys reconnected and streaming
+ application_name | client_addr |   state   | sync_state
+------------------+-------------+-----------+------------
+ walreceiver      | 10.0.1.4    | streaming | async
+ walreceiver      | 10.0.1.4    | streaming | async
+(2 rows)
+```
+
+---
+
+## Test 2 — Kill Standby, Watch Primary Continue Unaffected
+
+### Step 1 — Kill standby1
+
+```bash
+docker rm -f $(docker ps -q -f name=pg-standby1)
+```
+
+### Step 2 — Check primary reaction immediately
+
+Primary keeps running. Only one standby remains in replication:
+
+```bash
+docker exec -it $(docker ps -q -f name=pg-primary) psql -U postgres -c \
+  "SELECT application_name, client_addr, state, sync_state FROM pg_stat_replication;"
+```
+
+```text
+ application_name | client_addr |   state   | sync_state
+------------------+-------------+-----------+------------
+ walreceiver      | 10.0.1.4    | streaming | async
+(1 row)
+```
+
+Primary continues serving — killing a standby has zero impact on primary.
+
+### Step 3 — Swarm recreates standby1 automatically
+
+Within ~30 seconds Swarm detects the missing replica and starts a new container.
+Replication count returns to two:
+
+```text
+ application_name | client_addr |   state   | sync_state
+------------------+-------------+-----------+------------
+ walreceiver      | 10.0.1.4    | streaming | async
+ walreceiver      | 10.0.1.4    | streaming | async
+(2 rows)
+```
+
+### Step 4 — Verify data survived on recovered standby
+
+```bash
+docker exec -it $(docker ps -q -f name=pg-standby1) psql -U postgres -c \
+  "SELECT * FROM test1;"
+```
+
+```text
+ id |  name
+----+---------
+  1 | Clement
+(1 row)
+```
+
+Data is intact — named volumes persist across container restarts.
+
+---
+
+## HA Test Results Summary
+
+| Test | Primary Behaviour | Standby Behaviour | Data Loss | Recovery Time |
+|---|---|---|---|---|
+| Primary killed | Swarm restarts new container | Lose connection, retry, reconnect automatically | None (named volume persists) | ~7s restart + ~15s standby reconnect |
+| Standby killed | Unaffected, continues serving | Swarm restarts new container, reconnects to primary | None (named volume persists) | ~30s full reconnect |
+
+## Important HA Limitations of This PoC
+
+- **No automatic failover** — if primary goes down, standbys do NOT auto-promote.
+  Swarm only restarts the same primary container. This is container-level HA, not database-level HA.
+- **For automatic PostgreSQL failover** (promote standby to primary on failure),
+  you need Patroni, repmgr, or pg_auto_failover on top of this setup.
+- **Single node Swarm** — all containers run on the same WSL2 host.
+  True HA requires multiple physical/virtual nodes in the Swarm cluster.
