@@ -125,21 +125,6 @@ docker images
 ```
 
 ---
-# STEP 4.1 — Docker Network creation
-
-
-```bash
-docker network create \
---driver overlay \
---attachable \
-pg-swarm-net
-```
-Verify:
-
-```bash
-docker network ls
-```
----
 
 # STEP 5 — Create Working Directory
 
@@ -282,6 +267,21 @@ docker-stack.yml
 
 ---
 
+# STEP 8.1 — Docker Network creation
+
+
+```bash
+docker network create \
+--driver overlay \
+--attachable \
+pg-swarm-net
+```
+Verify:
+
+```bash
+docker network ls
+```
+---
 # STEP 9 — Deploy Docker Swarm Stack
 
 ## Deploy with Progress Display
