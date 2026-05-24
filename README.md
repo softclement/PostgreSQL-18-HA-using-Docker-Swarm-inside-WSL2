@@ -214,60 +214,51 @@ vi docker-stack.yml
 ```yaml
 version: '3.9'
 
-volumes:
-  pg-primary-data:
-  pg-standby1-data:
-  pg-standby2-data:
-
 services:
 
   pg-primary:
     image: postgres:18
     hostname: pg-primary
-    user: postgres
-    environment:
-      POSTGRES_PASSWORD: postgres
     ports:
       - "5434:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
     volumes:
-      - ./primary:/var/lib/postgresql/18/docker
-    deploy:
-      replicas: 1
+      - pg-primary-data:/var/lib/postgresql
     networks:
       - pgnet
 
   pg-standby1:
     image: postgres:18
     hostname: pg-standby1
-    user: postgres
-    environment:
-      POSTGRES_PASSWORD: postgres
     ports:
       - "6001:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
     volumes:
-      - ./standby1:/var/lib/postgresql/18/docker
-    deploy:
-      replicas: 1
+      - pg-standby1-data:/var/lib/postgresql
     networks:
       - pgnet
 
   pg-standby2:
     image: postgres:18
     hostname: pg-standby2
-    user: postgres
-    environment:
-      POSTGRES_PASSWORD: postgres
     ports:
       - "6002:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
     volumes:
-      - ./standby2:/var/lib/postgresql/18/docker
-    deploy:
-      replicas: 1
+      - pg-standby2-data:/var/lib/postgresql
     networks:
       - pgnet
 
 networks:
   pgnet:
+
+volumes:
+  pg-primary-data:
+  pg-standby1-data:
+  pg-standby2-data:
 ```
 
 ---
