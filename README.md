@@ -194,10 +194,13 @@ services:
     hostname: pg-primary
     ports:
       - "5434:5432"
+
     environment:
       POSTGRES_PASSWORD: postgres
+
     volumes:
-      - pg-primary-data:/var/lib/postgresql
+      - ./primary:/var/lib/postgresql/data
+
     networks:
       - pgnet
 
@@ -206,10 +209,13 @@ services:
     hostname: pg-standby1
     ports:
       - "6001:5432"
+
     environment:
       POSTGRES_PASSWORD: postgres
+
     volumes:
-      - pg-standby1-data:/var/lib/postgresql
+      - ./standby1:/var/lib/postgresql/data
+
     networks:
       - pgnet
 
@@ -218,20 +224,18 @@ services:
     hostname: pg-standby2
     ports:
       - "6002:5432"
+
     environment:
       POSTGRES_PASSWORD: postgres
+
     volumes:
-      - pg-standby2-data:/var/lib/postgresql
+      - ./standby2:/var/lib/postgresql/data
+
     networks:
       - pgnet
 
 networks:
   pgnet:
-
-volumes:
-  pg-primary-data:
-  pg-standby1-data:
-  pg-standby2-data:
 ```
 
 ---
