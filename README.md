@@ -460,6 +460,6 @@ Data is intact — named volumes persist across container restarts.
 - **No automatic failover** — if primary goes down, standbys do NOT auto-promote.
   Swarm only restarts the same primary container. This is container-level HA, not database-level HA.
 - **For automatic PostgreSQL failover** (promote standby to primary on failure),
-  you need Patroni, repmgr, or pg_auto_failover on top of this setup.
+  We need Patroni, repmgr, or pg_auto_failover on top of this setup.
 - **Single node Swarm** — all containers run on the same WSL2 host.
   True HA requires multiple physical/virtual nodes in the Swarm cluster.
