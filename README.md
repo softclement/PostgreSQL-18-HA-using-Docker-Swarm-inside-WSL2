@@ -187,22 +187,16 @@ Add:
 ```yaml
 version: '3.9'
 
-volumes:
-  pg-primary-data:
-  pg-standby1-data:
-  pg-standby2-data:
-
 services:
 
   pg-primary:
     image: postgres:18
-    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5434:5432"
     volumes:
-      - ./primary:/var/lib/postgresql/18/docker
+      - ./primary:/var/lib/postgresql/data
     deploy:
       replicas: 1
     networks:
@@ -210,13 +204,12 @@ services:
 
   pg-standby1:
     image: postgres:18
-    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
     ports:
       - "6001:5432"
     volumes:
-      - ./standby1:/var/lib/postgresql/18/docker
+      - ./standby1:/var/lib/postgresql/data
     deploy:
       replicas: 1
     networks:
@@ -224,13 +217,12 @@ services:
 
   pg-standby2:
     image: postgres:18
-    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
     ports:
       - "6002:5432"
     volumes:
-      - ./standby2:/var/lib/postgresql/18/docker
+      - ./standby2:/var/lib/postgresql/data
     deploy:
       replicas: 1
     networks:
