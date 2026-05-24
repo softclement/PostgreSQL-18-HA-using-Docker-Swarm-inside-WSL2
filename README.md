@@ -478,9 +478,9 @@ standby.signal
 # STEP 16 — Copy Standby Data
 
 ```bash
-cp -r standby_base/* standby1/
+sudo cp -r standby_base/* standby1/
 
-cp -r standby_base/* standby2/
+sudo cp -r standby_base/* standby2/
 ```
 
 ---
