@@ -125,6 +125,21 @@ docker images
 ```
 
 ---
+# STEP 4.1 — Docker Network creation
+
+
+```bash
+docker network create \
+--driver overlay \
+--attachable \
+pg-swarm-net
+```
+Verify:
+
+```bash
+docker network ls
+```
+---
 
 # STEP 5 — Create Working Directory
 
@@ -187,55 +202,58 @@ Add:
 ```yaml
 version: '3.9'
 
+volumes:
+  pg-primary-data:
+  pg-standby1-data:
+  pg-standby2-data:
+
 services:
 
   pg-primary:
     image: postgres:18
-    hostname: pg-primary
-    ports:
-      - "5434:5432"
-
+    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
-
+    ports:
+      - "5434:5432"
     volumes:
-      - ./primary:/var/lib/postgresql/data
-
+      - ./primary:/var/lib/postgresql/18/docker
+    deploy:
+      replicas: 1
     networks:
-      - pgnet
+      - pg-swarm-net
 
   pg-standby1:
     image: postgres:18
-    hostname: pg-standby1
-    ports:
-      - "6001:5432"
-
+    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
-
+    ports:
+      - "6001:5432"
     volumes:
-      - ./standby1:/var/lib/postgresql/data
-
+      - ./standby1:/var/lib/postgresql/18/docker
+    deploy:
+      replicas: 1
     networks:
-      - pgnet
+      - pg-swarm-net
 
   pg-standby2:
     image: postgres:18
-    hostname: pg-standby2
-    ports:
-      - "6002:5432"
-
+    user: "${UID}:${GID}"
     environment:
       POSTGRES_PASSWORD: postgres
-
+    ports:
+      - "6002:5432"
     volumes:
-      - ./standby2:/var/lib/postgresql/data
-
+      - ./standby2:/var/lib/postgresql/18/docker
+    deploy:
+      replicas: 1
     networks:
-      - pgnet
+      - pg-swarm-net
 
 networks:
-  pgnet:
+  pg-swarm-net:
+    external: true
 ```
 
 ---
@@ -382,7 +400,7 @@ cd ~/pg-swarm-ha
 Open:
 
 ```bash
-vi primary/pg_hba.conf
+sudo vi primary/pg_hba.conf
 ```
 
 Add:
